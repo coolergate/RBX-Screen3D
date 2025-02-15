@@ -6,10 +6,6 @@ local Definitions = require(script.Parent.Definitions)
 local componentGen : Definitions.componentGen = {} :: Definitions.componentGen
 componentGen.__index = componentGen
 
-local function pivot(original: CFrame, pivot: CFrame, angle: CFrame) 
-	return original:Inverse() * pivot * angle * pivot:Inverse() * original
-end
-
 function componentGen.new(Component2D, Screen3D)
 	local self = setmetatable(
 		{
@@ -17,23 +13,23 @@ function componentGen.new(Component2D, Screen3D)
 
 			component2D = Component2D,
 			surfaceGui = nil,
+			surfacePart = nil,
 
 			parent3D = nil,
 			screen3D = Screen3D,
 
-			offset = CFrame.new(),
+			offset = CFrame.identity,
 			viewportSize = Screen3D:GetIntendedCanvasSize(),
 
-			conn = nil
-		},
-		
-		componentGen
+			--conn = nil
+		}, componentGen
 	)
 
 	self.viewportSize = self:GetViewportSize()
 
-	if Component2D.Parent and Component2D.Parent:IsA("GuiObject") then
-		self.parent2D = Component2D.Parent
+	local parent = Component2D.Parent
+	if parent and parent:IsA("GuiObject") then
+		self.parent2D = parent
 	end
 
 	return self
@@ -59,28 +55,40 @@ function componentGen:Enable()
 	surfaceGui.AlwaysOnTop = true
 
 	self.surfaceGui = surfaceGui
+	self.surfacePart = surfacePart
 
 	self.component2D.Parent = self.surfaceGui
 
 	--self:RecomputeParent()
 
-	self.conn = RunService.RenderStepped:Connect(function(deltaTime: number)
-		if self.conn and not (self.surfaceGui and surfacePart) then
-			self.conn:Disconnect()
-			return
-		end
+	--self.conn = RunService.RenderStepped:Connect(function(deltaTime: number)
+	--	if self.conn and not (self.surfaceGui and surfacePart) then
+	--		self.conn:Disconnect()
+	--		return
+	--	end
 
-		local viewportSize = self:GetViewportSize()
+	--	local viewportSize = self:GetViewportSize()
 
-		self.viewportSize = viewportSize
+	--	self.viewportSize = viewportSize
 
-		surfaceGui.CanvasSize = viewportSize
-		surfacePart.Size = self:GetStudsScreenSize(viewportSize)
-		surfacePart.CFrame = self:ReadWorldCFrame()
-
-	end)
+	--	surfaceGui.CanvasSize = viewportSize
+	--	surfacePart.Size = self:GetStudsScreenSize(viewportSize)
+	--	surfacePart.CFrame = self:ReadWorldCFrame()
+	--end)
 
 	return self
+end
+
+function componentGen:Update()
+	local viewportSize = self:GetViewportSize()
+	self.viewportSize = viewportSize
+
+	local surfaceGui = self.surfaceGui
+	surfaceGui.CanvasSize = viewportSize
+	
+	local surfacePart = self.surfacePart
+	surfacePart.Size = self:GetStudsScreenSize(viewportSize)
+	surfacePart.CFrame = self:ReadWorldCFrame()
 end
 
 function componentGen:Disable()
@@ -90,9 +98,9 @@ function componentGen:Disable()
 
 	self.enabled = false
 
-	if self.conn then
-		self.conn:Disconnect()
-	end
+	--if self.conn then
+	--	self.conn:Disconnect()
+	--end
 
 	if self.component2D then
 		self.component2D.Parent = self.parent2D or self.screen3D.rootGui
@@ -115,7 +123,7 @@ end
 
 function componentGen:UDim2ToCFrame(position2D: UDim2): CFrame
 	if not self.component2D then
-		return CFrame.new()
+		return CFrame.identity
 	end
 
 	local scaleX, scaleY = position2D.X.Scale, position2D.Y.Scale
@@ -124,16 +132,14 @@ function componentGen:UDim2ToCFrame(position2D: UDim2): CFrame
 	local viewSize = self:GetViewportSize()
 	
 	local partSize = self:GetStudsScreenSize(viewSize)
-	local trueScaleX, trueScaleY = scaleX +  offsetX/ viewSize.X , scaleY + offsetY / viewSize.Y
+	local trueScaleX, trueScaleY = scaleX + offsetX / viewSize.X, scaleY + offsetY / viewSize.Y
 
-
-
-	local partSize = self:GetStudsScreenSize(viewSize)
+	-- local partSize = self:GetStudsScreenSize(viewSize)
 
 	return CFrame.new(
 		(partSize.X) * (trueScaleX - 0.5),
-		-(partSize.Y) * (trueScaleY -0.5 ),
-		0		
+		-(partSize.Y) * (trueScaleY - 0.5),
+		0
 	)	
 end
 
@@ -148,16 +154,19 @@ function componentGen:GetStudsScreenSize(viewportSize: Vector2): Vector3
 		math.tan(math.rad(FOV)/2)  * (viewportSize.Y / trueSize.Y),
 		0	
 	) * self.screen3D.displayDistance
-
 end
 
 function componentGen:RecomputeParent()
-	if self.parent2D and self.parent2D:IsA("GuiObject") then
-		self.parent3D = self.screen3D:GetComponent3D(self.parent2D)
+	local parent = self.parent2D
+	local parent3d = self.parent3D
+	if parent and parent:IsA("GuiObject") then
+		parent3d = self.screen3D:GetComponent3D(parent)
+		self.parent3D = parent3d
 	end
 
-	if self.surfaceGui then
-		local parent = self.parent3D
+	local surfaceGui = self.surfaceGui
+	if surfaceGui then
+		local parent = parent3d
 		local zIndex = 0
 		
 		while parent do
@@ -165,15 +174,16 @@ function componentGen:RecomputeParent()
 			parent = parent.parent3D
 		end
 		
-		self.surfaceGui.ZOffset = zIndex
+		surfaceGui.ZOffset = zIndex
 	end
 
 	return self
 end
 
 function componentGen:ReadWorldCFrame(): CFrame
-	if not self.component2D then
-		return CFrame.new()
+	local component2d = self.component2D
+	if not component2d then
+		return CFrame.identity
 	end
 
 	self:RecomputeParent()
@@ -182,47 +192,38 @@ function componentGen:ReadWorldCFrame(): CFrame
 	
 	local udimMax = self:UDim2ToCFrame(UDim2.fromScale(1,1))
 	
-	if self.parent3D then
-
-
-		if not self.parent3D.component2D or not self.parent2D then
-			return CFrame.new()
+	local parent3d = self.parent3D
+	if parent3d then
+		if not parent3d.component2D or not self.parent2D then
+			return CFrame.identity
 		end
+	
+		local anchorPoint = parent3d.component2D.AnchorPoint
 
-
-		
-		local anchorPoint = self.parent3D.component2D.AnchorPoint
-
-		originalCFrame = self.parent3D:ReadWorldCFrame()
-		udimPos = self.parent3D.component2D.Position 
-		addedPosition = 
-			self.parent3D:UDim2ToCFrame(udimPos) 
+		originalCFrame = parent3d:ReadWorldCFrame()
+		udimPos = parent3d.component2D.Position
+		addedPosition =
+			parent3d:UDim2ToCFrame(udimPos) 
 			* udimMax  
-			* self:UDim2ToCFrame(UDim2.fromScale(-anchorPoint.X+0.5,-anchorPoint.Y+0.5))
-			* CFrame.Angles(0,0, -math.rad(self.parent2D.Rotation) ) 
+			* self:UDim2ToCFrame(UDim2.fromScale(-anchorPoint.X + 0.5, -anchorPoint.Y + 0.5))
+			* CFrame.Angles(0, 0, -math.rad(self.parent2D.Rotation)) 
 	else
-		local viewportDiff = self.screen3D:GetRealCanvasSize() - self.screen3D:GetIntendedCanvasSize()
+		local screen3d = self.screen3D
+		local viewportDiff = screen3d:GetRealCanvasSize() - screen3d:GetIntendedCanvasSize()
 
-		originalCFrame = workspace.CurrentCamera.CFrame * CFrame.new(0,0,-(self.screen3D.displayDistance)/2 ) * self.screen3D.rootOffset
-		
-		udimPos = UDim2.new(0,viewportDiff.X/2,0,viewportDiff.Y/2)
-		
-		addedPosition = self:UDim2ToCFrame(udimPos) * self:UDim2ToCFrame(UDim2.fromScale(1,1)) 
-
+		originalCFrame = workspace.CurrentCamera.CFrame * CFrame.new(0,0, -screen3d.displayDistance / 2) * screen3d.rootOffset
+		udimPos = UDim2.new(0, viewportDiff.X / 2, 0, viewportDiff.Y / 2)
+		addedPosition = self:UDim2ToCFrame(udimPos) * self:UDim2ToCFrame(UDim2.fromScale(1, 1))
 	end
 	
-	
 	local finalCFrame = originalCFrame  * addedPosition
-	
-	local finalPivot =  
-		finalCFrame 
-		* udimMax:Inverse() 
-		* self:UDim2ToCFrame(self.component2D.Position) 
+	local finalPivot =
+		finalCFrame
+		* udimMax:Inverse()
+		* self:UDim2ToCFrame(component2d.Position) 
 		* udimMax
 
-	
-	
-	return finalCFrame * pivot(finalCFrame,finalPivot,self.offset) 
+	return finalCFrame * (finalCFrame:Inverse() * finalPivot * self.offset * finalPivot:Inverse() * finalCFrame)
 end
 
 return componentGen

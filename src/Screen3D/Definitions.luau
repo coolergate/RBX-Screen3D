@@ -5,7 +5,6 @@ export type screen3D = typeof(
 			rootGui : ScreenGui,
 			displayDistance : number,
 			rootOffset : CFrame
-
 		}, 
 		
 		{} :: screenGen
@@ -19,6 +18,7 @@ export type component3D = typeof(
 			
 			component2D : GuiObject?,
 			surfaceGui : SurfaceGui?,
+			surfacePart : BasePart?,
 			
 			parent2D : GuiObject?,
 			screen3D : screen3D,
@@ -27,7 +27,7 @@ export type component3D = typeof(
 			offset : CFrame,
 			viewportSize : Vector2,
 
-			conn : RBXScriptConnection?
+			--conn : RBXScriptConnection?
 		},
 		
 		{} :: componentGen
